@@ -49,7 +49,7 @@ impl Universe {
                 let cell = Cell {
                     row: row_index,
                     col: col_index,
-                    dead: if rand_number % 5 == 0 { true } else { false },
+                    dead: if rand_number % 10 == 0 { true } else { false },
                 };
                 row.push(cell);
             }
@@ -61,6 +61,34 @@ impl Universe {
             cells,
         }
     }
+
+    fn static_live_neighbour_count(&self, cell_row: i32, cell_col: i32) -> u8 {
+        let mut count = 0u8;
+        for ncell in NEIGHBOURING_CELLS.clone().iter() {
+            let row = cell_row + ncell.0;
+            let col = cell_col + ncell.1;
+            if row < 0 {
+                continue;
+            } else if row >= self.height.try_into().unwrap() {
+                continue;
+            }
+            let row: usize = row.try_into().unwrap();
+
+            if col < 0 {
+                continue;
+            } else if col >= self.width.try_into().unwrap() {
+                continue;
+            }
+            let col: usize = col.try_into().unwrap();
+
+            let cell: Cell = self.cells[row][col];
+            if cell.dead == false {
+                count += 1;
+            }
+        }
+        count
+    }
+
     fn live_neighbour_count(&self, cell_row: i32, cell_col: i32) -> u8 {
         let mut count = 0u8;
         for ncell in NEIGHBOURING_CELLS.clone().iter() {
@@ -94,7 +122,7 @@ impl Universe {
         let mut dead_cells = 0;
         for row in 0..self.height {
             for col in 0..self.width {
-                let alive_nearby_cells = self.live_neighbour_count(row as i32, col as i32);
+                let alive_nearby_cells = self.static_live_neighbour_count(row as i32, col as i32);
                 let cell = &mut cells[row as usize][col as usize];
                 if cell.dead == true {
                     dead_cells += 1;
