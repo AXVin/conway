@@ -1,22 +1,24 @@
 #![allow(dead_code)]
-use rand::{self, prelude::SliceRandom};
-use std::{
-    convert::TryInto,
-    fmt::{self, Display},
-    thread,
-    time::Duration,
-};
+use rand;
+use std::{cmp::PartialEq, convert::TryInto, fmt, thread, time::Duration};
 
-#[derive(Clone, Copy, Debug)]
-struct Cell {
-    row: u32,
-    col: u32,
-    dead: bool,
+const WIDTH: u32 = 50;
+const HEIGHT: u32 = 25;
+const DURATION: u64 = 20;
+const ALIVE_CHANCE: u32 = 2;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Cell {
+    Dead,
+    Alive,
 }
 
 impl fmt::Display for Cell {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let text = if self.dead { "░" } else { "█" };
+        let text = match self {
+            Cell::Dead => "░",
+            Cell::Alive => "█",
+        };
         write!(f, "{}", text)
     }
 }
@@ -38,18 +40,31 @@ struct Universe {
     cells: Vec<Vec<Cell>>,
 }
 
+impl fmt::Display for Universe {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut universe = "".to_string();
+        for row in &self.cells {
+            for cell in row {
+                universe.push_str(&cell.to_string());
+            }
+            universe.push_str("\n");
+        }
+        write!(f, "{}", universe)
+    }
+}
+
 impl Universe {
     fn new(height: u32, width: u32) -> Self {
         let mut cells = Vec::new();
 
-        for row_index in 0..height {
+        for _ in 0..height {
             let mut row = Vec::new();
-            for col_index in 0..width {
+            for _ in 0..width {
                 let rand_number = rand::random::<u32>();
-                let cell = Cell {
-                    row: row_index,
-                    col: col_index,
-                    dead: if rand_number % 10 == 0 { true } else { false },
+                let cell = if rand_number % ALIVE_CHANCE == 0 {
+                    Cell::Alive
+                } else {
+                    Cell::Dead
                 };
                 row.push(cell);
             }
@@ -82,7 +97,7 @@ impl Universe {
             let col: usize = col.try_into().unwrap();
 
             let cell: Cell = self.cells[row][col];
-            if cell.dead == false {
+            if cell == Cell::Alive {
                 count += 1;
             }
         }
@@ -95,80 +110,56 @@ impl Universe {
             let row = cell_row + ncell.0;
             let col = cell_col + ncell.1;
             let row: usize = if row < 0 {
-                (self.height - 1).try_into().unwrap()
+                (self.height - 1) as usize
             } else if row >= self.height.try_into().unwrap() {
                 0
             } else {
-                row.try_into().unwrap()
+                row as usize
             };
             let col = if col < 0 {
-                (self.width - 1).try_into().unwrap()
+                (self.width - 1) as usize
             } else if col >= self.width.try_into().unwrap() {
                 0
             } else {
-                col.try_into().unwrap()
+                col as usize
             };
             let cell = self.cells[row][col];
-            if cell.dead == false {
+            if cell == Cell::Alive {
                 count += 1;
             }
         }
         count
     }
 
-    fn tick(&mut self) -> Result<(), &str> {
+    fn tick(&mut self) {
         let mut cells = self.cells.clone();
-        let total_cells = self.height * self.width;
-        let mut dead_cells = 0;
+
         for row in 0..self.height {
             for col in 0..self.width {
-                let alive_nearby_cells = self.static_live_neighbour_count(row as i32, col as i32);
-                let cell = &mut cells[row as usize][col as usize];
-                if cell.dead == true {
-                    dead_cells += 1;
-                    if alive_nearby_cells == 2u8 || alive_nearby_cells == 3u8 {
-                        cell.dead = false;
-                        dead_cells -= 1;
-                    }
-                } else {
-                    if alive_nearby_cells < 2u8 || alive_nearby_cells > 3u8 {
-                        cell.dead = true;
-                        dead_cells += 1;
-                    }
-                }
+                let alive_nearby_cells = self.live_neighbour_count(row as i32, col as i32);
+                let cell = cells[row as usize][col as usize];
+                let next_cell = match (cell, alive_nearby_cells) {
+                    (Cell::Alive, x) if x < 2 || x > 3 => Cell::Dead,
+                    (Cell::Dead, 3) => Cell::Alive,
+                    (cell, _) => cell.clone(),
+                };
+                cells[row as usize][col as usize] = next_cell;
             }
         }
         self.cells = cells;
-        dbg!(&total_cells);
-        dbg!(&dead_cells);
-        if dead_cells == total_cells {
-            return Err("Game Over!");
-        }
-        Ok(())
     }
 
     fn run(&mut self) {
         loop {
-            if let Err(e) = self.tick() {
-                println!("{}", e);
-                break;
-            }
-            let mut universe = "".to_string();
-            for row in &self.cells {
-                for cell in row {
-                    let x = format!("{}", cell);
-                    universe.push_str(&x);
-                }
-                universe.push_str("\n");
-            }
+            self.tick();
             print!("\x1B[2J\x1B[1;1H");
-            println!("{}", universe);
-            thread::sleep(Duration::from_millis(300));
+            println!("{}", self);
+            thread::sleep(Duration::from_millis(DURATION));
         }
     }
 }
 
 fn main() {
-    let mut universe = Universe::new(25, 50);
+    let mut universe = Universe::new(HEIGHT, WIDTH);
     universe.run();
 }
